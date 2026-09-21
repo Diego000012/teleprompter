@@ -83,6 +83,12 @@ textarea{width:100%;min-height:230px;resize:vertical;background:var(--field);bor
 .btn:hover{border-color:var(--muted)}
 .stats{margin-left:auto;color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
 .warn{color:var(--accent);font-weight:500;margin:0 0 10px}
+/* estado armado del boton de vaciar: sin rojo en la paleta, se usa el acento
+   solido, que ya se lee como "accion pendiente" en el resto de la interfaz */
+.btn.armed{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.undo{display:flex;align-items:center;gap:10px;background:var(--field);border:1px solid var(--line);
+  border-radius:9px;padding:8px 10px;margin-bottom:10px;font-size:13px;color:var(--muted)}
+.undo button{margin-left:auto}
 
 .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:1}
 .seg button{flex:1;background:var(--field);border:0;padding:7px 0;cursor:pointer;font-size:13px}
@@ -183,6 +189,25 @@ body.prompter .badge{display:none}
   body.prompter .stage{height:100%;order:0;position:fixed;inset:0}
   body.prompter .app{height:100%}
 }
+/* Objetivos tactiles comodos (iPad). Va al final a proposito: sobreescribe
+   reglas de .btn/.cue-act declaradas mas arriba y, a igual especificidad,
+   manda la ultima. */
+@media (pointer:coarse){
+  .btn{min-height:40px;padding:8px 14px}
+  .cue-act{flex:0 0 44px;height:44px;font-size:15px}
+  .cues kbd{flex:0 0 26px;height:26px}
+  .cues li{gap:4px}
+  .hud button{min-width:44px;height:44px}
+  .hud input[type=color]{width:36px;height:36px}
+}
+/* Con objetivos de 44px la barra no cabe en una fila en un iPad horizontal y
+   se parte, comiendo alto del prompter. Se estrechan slider y selector. */
+@media (pointer:coarse) and (max-width:1200px){
+  .hud input[type=range]{width:64px}
+  .hud select{max-width:104px}
+  .hud .sep{margin:0 2px}
+  .hud{gap:2px}
+}
 @media (prefers-reduced-motion:reduce){.content.smooth{transition:none}.hud{transition:none}}
 </style>
 </head>
@@ -200,7 +225,11 @@ body.prompter .badge{display:none}
         <input type="text" id="cueName" placeholder="Nombre del cue" aria-label="Nombre del nuevo cue">
         <button class="btn" id="addCue" title="Inserta el cue justo antes de la línea donde está el cursor">+ Cue</button>
       </div>
-      <div class="tools"><span class="stats" id="stats"></span></div>
+      <div class="tools">
+        <button class="btn" id="clearBtn" type="button">Vaciar guion</button>
+        <span class="stats" id="stats"></span>
+      </div>
+      <div class="undo" id="undoBar" hidden><span>Guion vaciado.</span><button class="btn" id="undoBtn" type="button">Deshacer</button></div>
       <p class="hint warn" id="fitWarn" hidden>⚠ Hay una palabra más ancha que el espacio disponible: se va a cortar por el borde. Baja el tamaño o el margen.</p>
       <p class="hint" style="margin-bottom:8px">Un cue es una línea que empieza con <b>#</b> o una etiqueta <b>&lt;cue 1 - Sala&gt;</b> en cualquier parte del guion. Si pegas un script que ya las trae, se detectan solas.</p>
       <ul class="cues" id="cueList"></ul>
@@ -222,7 +251,7 @@ body.prompter .badge{display:none}
 
     <section>
       <h2>Movimiento</h2>
-      <div class="row"><label for="speed">Velocidad</label><div class="ctl"><input type="range" id="speed" min="0.5" max="10" step="0.5"><output id="o-speed"></output></div></div>
+      <div class="row"><label for="speed">Velocidad</label><div class="ctl"><input type="range" id="speed" min="0.5" max="20" step="0.5"><output id="o-speed"></output></div></div>
       <div class="row"><label for="guide">Línea guía</label><div class="ctl"><input type="range" id="guide" min="10" max="80" step="1"><output id="o-guide"></output></div></div>
       <label class="switch"><span>Mostrar línea guía</span><input type="checkbox" id="showGuide"></label>
       <label class="switch"><span>Cuenta regresiva de 3 s</span><input type="checkbox" id="countdown"></label>
@@ -494,7 +523,12 @@ function measure(){
 function updateStats(){
   const words=(S.text.replace(/^\s*#.*$/gm,"").replace(/<\s*cue\b[^>]*>/gi,"").match(/\S+/g)||[]).length;
   const secs=Math.round(maxY/pxPerSec());
-  $("stats").textContent=`${words} palabras · ~${Math.floor(secs/60)}:${String(secs%60).padStart(2,"0")}`;
+  // El multiplicador no dice nada por si solo: pxPerSec depende del tamano de
+  // fuente, asi que x10 avanza muy distinto con 40px que con 140px. Las palabras
+  // por minuto si son comparables entre ajustes.
+  const ppm=secs>0?Math.round(words/secs*60):0;
+  const dur=`~${Math.floor(secs/60)}:${String(secs%60).padStart(2,"0")}`;
+  $("stats").textContent=words?`${words} palabras · ${dur} · ${ppm} ppm`:"Guion vacío";
   // sin break-word una palabra que no quepa desborda, y el overflow del
   // escenario la cortaria sin que se note: mejor avisarlo
   $("fitWarn").hidden=content.scrollWidth<=content.clientWidth+1;
@@ -570,7 +604,47 @@ $("addCue").onclick=()=>{
 $("cueName").addEventListener("keydown",e=>{
   if(e.key==="Enter"){e.preventDefault();$("addCue").click()}
 });
-function setSpeed(d){S.speed=Math.max(0.5,Math.min(10,+(S.speed+d).toFixed(1)));syncControls();applyStyle();save();flashHud()}
+
+// Vaciar el guion. Pensado para tactil, donde no hay Cmd+A ni seleccionar todo
+// comodamente: dos toques para confirmar (sin confirm(), que bloquea) y un
+// deshacer con ventana amplia, porque es la unica accion que borra trabajo.
+let armed=false,armT,undoText=null,undoT;
+function disarm(){
+  armed=false;clearTimeout(armT);
+  const b=$("clearBtn");b.textContent="Vaciar guion";b.classList.remove("armed");
+}
+function hideUndo(){clearTimeout(undoT);$("undoBar").hidden=true;undoText=null}
+$("clearBtn").onclick=()=>{
+  const b=$("clearBtn");
+  if(!armed){
+    if(!S.text.trim())return;            // ya esta vacio
+    armed=true;b.textContent="Toca otra vez para vaciar";b.classList.add("armed");
+    armT=setTimeout(disarm,4000);
+    return;
+  }
+  disarm();
+  undoText=S.text;
+  setText("");
+  y=0;applyPos();
+  $("undoBar").hidden=false;
+  clearTimeout(undoT);undoT=setTimeout(hideUndo,20000);
+  $("undoBtn").focus();
+};
+$("undoBtn").onclick=()=>{
+  if(undoText==null)return;
+  const t=undoText;hideUndo();setText(t);
+  ta.focus();
+};
+// escribir en el guion cancela el estado armado
+ta.addEventListener("input",disarm);
+// Paso adaptativo: de 0.5 en 0.5 hasta x5, de 1 en 1 por encima. Con el rango
+// ampliado a x20 un paso fijo de 0.5 obligaba a 30 pulsaciones para cruzarlo.
+const SPEED_MAX=20;
+function speedStep(){return S.speed<5?0.5:1}
+function setSpeed(dir){
+  S.speed=Math.max(0.5,Math.min(SPEED_MAX,+(S.speed+dir*speedStep()).toFixed(1)));
+  syncControls();applyStyle();save();flashHud();
+}
 
 // Play / pausa
 function updatePlayUI(){
@@ -641,8 +715,8 @@ $("h-home").onclick=()=>jumpTo(0);
 $("h-up").onclick=()=>step(-1);
 $("h-down").onclick=()=>step(1);
 $("h-play").onclick=toggle;
-$("h-slow").onclick=()=>setSpeed(-0.5);
-$("h-fast").onclick=()=>setSpeed(0.5);
+$("h-slow").onclick=()=>setSpeed(-1);
+$("h-fast").onclick=()=>setSpeed(1);
 $("h-fs").onclick=toggleFS;
 $("h-exit").onclick=exitPrompter;
 $("h-cue").onchange=e=>{if(e.target.value!=="")goCue(+e.target.value);e.target.value="";e.target.blur()};
@@ -670,8 +744,8 @@ document.addEventListener("keydown",e=>{
   if(k===" "||k==="Spacebar")toggle();
   else if(k==="ArrowUp")step(-1);
   else if(k==="ArrowDown")step(1);
-  else if(k==="ArrowLeft")setSpeed(-0.5);
-  else if(k==="ArrowRight")setSpeed(0.5);
+  else if(k==="ArrowLeft")setSpeed(-1);
+  else if(k==="ArrowRight")setSpeed(1);
   else if(k==="PageUp")jumpTo(y-stage.clientHeight*0.6);
   else if(k==="PageDown")jumpTo(y+stage.clientHeight*0.6);
   else if(k==="Home")jumpTo(0);
