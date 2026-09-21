@@ -154,7 +154,7 @@ textarea{width:100%;min-height:230px;resize:vertical;background:var(--field);bor
 .hud button:hover{background:rgba(255,255,255,.12)}
 .hud .pp{background:var(--blueberry-100);color:var(--neutral-0);font-weight:700}
 .hud .pp:hover{background:var(--blueberry-20);color:var(--neutral-200)}
-.hud .sp{font-size:13px;min-width:54px;text-align:center;font-variant-numeric:tabular-nums}
+.hud .sp{font-size:13px;min-width:62px;text-align:center;font-variant-numeric:tabular-nums}
 .hud select{width:auto;max-width:150px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:var(--neutral-0);border-radius:8px;padding:7px}
 .hud select option{color:var(--neutral-200)}
 .hud .sep{width:1px;height:24px;background:rgba(255,255,255,.18);margin:0 4px}
@@ -174,7 +174,7 @@ textarea{width:100%;min-height:230px;resize:vertical;background:var(--field);bor
 }
 
 body.prompter .side{display:none}
-body.prompter .stage{position:fixed;inset:0;z-index:50;cursor:none}
+body.prompter .stage{position:fixed;inset:0;z-index:50;cursor:none;touch-action:none}
 body.prompter.cursor .stage{cursor:default}
 body.prompter .hud{display:flex}
 body.prompter .badge{display:none}
@@ -251,7 +251,7 @@ body.prompter .badge{display:none}
 
     <section>
       <h2>Movimiento</h2>
-      <div class="row"><label for="speed">Velocidad</label><div class="ctl"><input type="range" id="speed" min="0.5" max="20" step="0.5"><output id="o-speed"></output></div></div>
+      <div class="row"><label for="wpm">Velocidad</label><div class="ctl"><input type="range" id="wpm" min="60" max="400" step="5"><output id="o-wpm"></output></div></div>
       <div class="row"><label for="guide">Línea guía</label><div class="ctl"><input type="range" id="guide" min="10" max="80" step="1"><output id="o-guide"></output></div></div>
       <label class="switch"><span>Mostrar línea guía</span><input type="checkbox" id="showGuide"></label>
       <label class="switch"><span>Cuenta regresiva de 3 s</span><input type="checkbox" id="countdown"></label>
@@ -271,7 +271,7 @@ body.prompter .badge{display:none}
       <div class="keys">
         <kbd>Espacio</kbd><span>Play / pausa</span>
         <kbd>↑ ↓</kbd><span>Retroceder / avanzar una línea</span>
-        <kbd>← →</kbd><span>Bajar / subir velocidad</span>
+        <kbd>← →</kbd><span>Bajar / subir 10 ppm</span>
         <kbd>1 - 9</kbd><span>Saltar al cue</span>
         <kbd>Inicio</kbd><span>Volver al principio</span>
         <kbd>F</kbd><span>Pantalla completa</span>
@@ -370,9 +370,19 @@ Usa las teclas 1 a 9 para saltar a cada cue.
 Gracias por ver. Nos vemos en el siguiente.`;
 
 const S={text:DEFAULT_TEXT,font:"Inter",customFont:"",size:64,lh:1.4,bold:false,align:"center",
-  speed:2,guide:35,showGuide:true,countdown:false,margin:10,bg:"#000000",color:"#ffffff",mirrorH:false,mirrorV:false};
-const KEY="teleprompter-v1";
-try{const r=localStorage.getItem(KEY);if(r)Object.assign(S,JSON.parse(r));}catch(e){}
+  wpm:140,guide:35,showGuide:true,countdown:false,margin:10,bg:"#000000",color:"#ffffff",mirrorH:false,mirrorV:false};
+const KEY="teleprompter-v2";
+try{
+  const r=localStorage.getItem(KEY);
+  if(r)Object.assign(S,JSON.parse(r));
+  else{
+    // v1 guardaba 'speed', un multiplicador acoplado al tamano de fuente. No es
+    // convertible a palabras por minuto sin conocer el guion, asi que se descarta
+    // esa clave y se conserva todo lo demas: guion, fuente, colores, espejos.
+    const v1=localStorage.getItem("teleprompter-v1");
+    if(v1){const o=JSON.parse(v1);delete o.speed;Object.assign(S,o);}
+  }
+}catch(e){}
 let saveT;function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}},250)}
 
 const $=id=>document.getElementById(id);
@@ -388,7 +398,13 @@ function fontStack(){
   const f=FONTS.find(x=>x[0]===S.font);return f?f[1]:FONTS[0][1];
 }
 const lineH=()=>S.size*S.lh;
-const pxPerSec=()=>S.speed*S.size*0.3;
+// px que ocupa una palabra de media en el render actual. Lo recalcula measure().
+let words=0,pxPerWord=0;
+const WPM_MIN=60,WPM_MAX=400;
+// Velocidad real en px/s. Como pxPerWord crece con el tamano de fuente y con el
+// margen, las palabras por minuto se mantienen al cambiar cualquiera de los dos:
+// eso es justo lo que el multiplicador antiguo no hacia.
+const pxPerSec=()=>S.wpm/60*(pxPerWord||lineH()*0.5);
 const clamp=v=>Math.max(0,Math.min(maxY,v));
 
 // Render del guion
@@ -516,19 +532,20 @@ function removeCue(i){
   if(rest&&S.text[a-1]===" "&&S.text[b]===" ")b++;
   setText(S.text.slice(0,a)+S.text.slice(b));
 }
+function countWords(){
+  return (S.text.replace(/^\s*#.*$/gm,"").replace(/<\s*cue\b[^>]*>/gi,"").match(/\S+/g)||[]).length;
+}
 function measure(){
   maxY=Math.max(0,content.scrollHeight-lineH()*0.5);
+  words=countWords();
+  pxPerWord=words>0?content.scrollHeight/words:0;
   y=clamp(y);applyPos();updateStats();
 }
 function updateStats(){
-  const words=(S.text.replace(/^\s*#.*$/gm,"").replace(/<\s*cue\b[^>]*>/gi,"").match(/\S+/g)||[]).length;
-  const secs=Math.round(maxY/pxPerSec());
-  // El multiplicador no dice nada por si solo: pxPerSec depende del tamano de
-  // fuente, asi que x10 avanza muy distinto con 40px que con 140px. Las palabras
-  // por minuto si son comparables entre ajustes.
-  const ppm=secs>0?Math.round(words/secs*60):0;
+  // con la velocidad en ppm la duracion es directa: no depende del render
+  const secs=words?Math.round(words/S.wpm*60):0;
   const dur=`~${Math.floor(secs/60)}:${String(secs%60).padStart(2,"0")}`;
-  $("stats").textContent=words?`${words} palabras · ${dur} · ${ppm} ppm`:"Guion vacío";
+  $("stats").textContent=words?`${words} palabras · ${dur}`:"Guion vacío";
   // sin break-word una palabra que no quepa desborda, y el overflow del
   // escenario la cortaria sin que se note: mejor avisarlo
   $("fitWarn").hidden=content.scrollWidth<=content.clientWidth+1;
@@ -560,7 +577,7 @@ function applyStyle(){
   $("customRow").hidden=S.font!=="Otra (escribir nombre)";
   document.querySelectorAll("#align button,#h-align button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.align===S.align));
   $("o-size").textContent=S.size+" px";$("o-lh").textContent=(+S.lh).toFixed(2);
-  $("o-speed").textContent="×"+(+S.speed).toFixed(1);$("h-speed").textContent="×"+(+S.speed).toFixed(1);
+  $("o-wpm").textContent=S.wpm+" ppm";$("h-speed").textContent=S.wpm+" ppm";
   $("o-guide").textContent=S.guide+"%";$("o-margin").textContent=S.margin+"%";
   $("o-bg").textContent=S.bg.toUpperCase();$("o-color").textContent=S.color.toUpperCase();
   requestAnimationFrame(measure);
@@ -569,7 +586,7 @@ function applyStyle(){
 // Controles
 ta.value=S.text;
 ta.addEventListener("input",()=>{S.text=ta.value;render();save()});
-const binds={font:"value",customFont:"value",size:"num",lh:"num",speed:"num",guide:"num",margin:"num",bg:"value",color:"value",
+const binds={font:"value",customFont:"value",size:"num",lh:"num",wpm:"num",guide:"num",margin:"num",bg:"value",color:"value",
   bold:"check",showGuide:"check",countdown:"check",mirrorH:"check",mirrorV:"check"};
 // Claves que ademas tienen un control gemelo en la barra del modo prompter
 const MIRRORS={size:"h-size",margin:"h-margin",bg:"h-bg",color:"h-color"};
@@ -637,12 +654,11 @@ $("undoBtn").onclick=()=>{
 };
 // escribir en el guion cancela el estado armado
 ta.addEventListener("input",disarm);
-// Paso adaptativo: de 0.5 en 0.5 hasta x5, de 1 en 1 por encima. Con el rango
-// ampliado a x20 un paso fijo de 0.5 obligaba a 30 pulsaciones para cruzarlo.
-const SPEED_MAX=20;
-function speedStep(){return S.speed<5?0.5:1}
-function setSpeed(dir){
-  S.speed=Math.max(0.5,Math.min(SPEED_MAX,+(S.speed+dir*speedStep()).toFixed(1)));
+// Las flechas y los botones -/+ mueven de 10 en 10 ppm: 34 pasos para cruzar
+// todo el rango, y 10 ppm es un salto que se nota al leer.
+const WPM_STEP=10;
+function setWpm(dir){
+  S.wpm=Math.max(WPM_MIN,Math.min(WPM_MAX,S.wpm+dir*WPM_STEP));
   syncControls();applyStyle();save();flashHud();
 }
 
@@ -715,23 +731,54 @@ $("h-home").onclick=()=>jumpTo(0);
 $("h-up").onclick=()=>step(-1);
 $("h-down").onclick=()=>step(1);
 $("h-play").onclick=toggle;
-$("h-slow").onclick=()=>setSpeed(-1);
-$("h-fast").onclick=()=>setSpeed(1);
+$("h-slow").onclick=()=>setWpm(-1);
+$("h-fast").onclick=()=>setWpm(1);
 $("h-fs").onclick=toggleFS;
 $("h-exit").onclick=exitPrompter;
 $("h-cue").onchange=e=>{if(e.target.value!=="")goCue(+e.target.value);e.target.value="";e.target.blur()};
 hud.addEventListener("click",e=>{if(e.target.tagName==="BUTTON")e.target.blur()});
 
 // Escenario: clic y rueda
+// En el layout de una columna, fuera del prompter, el escenario es sticky y
+// ocupa 55vh: ahi el gesto se le deja a la pagina para poder bajar a los controles.
+const layoutMovil=()=>window.matchMedia("(max-width:820px)").matches;
+const capturaGesto=()=>document.body.classList.contains("prompter")||!layoutMovil();
+
+// Arrastre con el dedo o con el raton. Pointer Events cubre los dos, y el
+// escenario solo escuchaba 'wheel', que en tactil no existe.
+let dragId=null,dragFrom=0,dragBase=0,arrastro=false;
+stage.addEventListener("pointerdown",e=>{
+  if(e.pointerType==="mouse"&&e.button!==0)return;
+  if(!capturaGesto())return;
+  dragId=e.pointerId;dragFrom=e.clientY;dragBase=y;arrastro=false;
+  try{stage.setPointerCapture(e.pointerId)}catch(_){}
+});
+stage.addEventListener("pointermove",e=>{
+  if(e.pointerId!==dragId)return;
+  const d=e.clientY-dragFrom;
+  if(!arrastro&&Math.abs(d)<8)return;   // por debajo de 8px sigue siendo un toque
+  if(!arrastro&&playing)pause();
+  arrastro=true;
+  y=clamp(dragBase-d*(S.mirrorV?-1:1));
+  applyPos();
+});
+function finDrag(e){
+  if(e.pointerId!==dragId)return;
+  dragId=null;
+  try{stage.releasePointerCapture(e.pointerId)}catch(_){}
+}
+stage.addEventListener("pointerup",finDrag);
+stage.addEventListener("pointercancel",finDrag);
+
 stage.addEventListener("click",e=>{
+  if(arrastro){arrastro=false;return}   // fue un arrastre, no un toque
   if(document.body.classList.contains("prompter")){toggle();return}
   const el=e.target.closest(".line,.cue,.gap");if(el)jumpTo(el.offsetTop);
 });
 stage.addEventListener("wheel",e=>{
   // en el layout de una columna el escenario es sticky: tragarse la rueda impedia
   // hacer scroll de la pagina para llegar a los controles
-  const prompter=document.body.classList.contains("prompter");
-  if(!prompter&&window.matchMedia("(max-width:820px)").matches)return;
+  if(!capturaGesto())return;
   e.preventDefault();y=clamp(y+e.deltaY*(S.mirrorV?-1:1));applyPos();
 },{passive:false});
 
@@ -744,8 +791,8 @@ document.addEventListener("keydown",e=>{
   if(k===" "||k==="Spacebar")toggle();
   else if(k==="ArrowUp")step(-1);
   else if(k==="ArrowDown")step(1);
-  else if(k==="ArrowLeft")setSpeed(-1);
-  else if(k==="ArrowRight")setSpeed(1);
+  else if(k==="ArrowLeft")setWpm(-1);
+  else if(k==="ArrowRight")setWpm(1);
   else if(k==="PageUp")jumpTo(y-stage.clientHeight*0.6);
   else if(k==="PageDown")jumpTo(y+stage.clientHeight*0.6);
   else if(k==="Home")jumpTo(0);
