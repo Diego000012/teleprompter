@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Teleprompter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Inter:wght@400;700&family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Lato:wght@400;700&family=Montserrat:wght@400;700&family=Poppins:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&family=Merriweather:wght@400;700&family=Lora:wght@400;700&family=Source+Serif+4:wght@400;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#e9ecf1; --panel:#f8f9fb; --ink:#1b2130; --muted:#5d6678; --line:#d6dbe3;
+  --field:#eef1f5; --accent:#e0a019; --accent-ink:#1b2130;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#11151d; --panel:#1a202b; --ink:#e8ebf1; --muted:#98a1b3; --line:#2a3240;
+    --field:#232a37; --accent:#f2b33d; --accent-ink:#11151d;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11151d; --panel:#1a202b; --ink:#e8ebf1; --muted:#98a1b3; --line:#2a3240;
+  --field:#232a37; --accent:#f2b33d; --accent-ink:#11151d;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.45 'IBM Plex Sans',system-ui,-apple-system,Segoe UI,Arial,sans-serif;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:360px 1fr;height:100%}
+.side{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:18px 18px 40px}
+.brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.brand h1{font-size:17px;font-weight:600;margin:0}
+.brand small{color:var(--muted)}
+.play-main{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--accent);color:var(--accent-ink);border:0;border-radius:10px;padding:12px;
+  font-weight:600;font-size:15px;cursor:pointer;margin-bottom:6px}
+.play-main:hover{filter:brightness(1.05)}
+.hint{color:var(--muted);font-size:12.5px;margin:0 0 16px}
+
+section{border-top:1px solid var(--line);padding:14px 0 6px}
+section h2{font-size:13px;font-weight:600;margin:0 0 10px;color:var(--ink)}
+.row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+[hidden]{display:none!important}
+.row label{flex:0 0 96px;color:var(--muted);font-size:13px}
+.row .ctl{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
+.row output{min-width:44px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);font-size:13px}
+input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
+select,input[type=text]{width:100%;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:7px 9px}
+input[type=color]{width:44px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--field);padding:2px;cursor:pointer}
+.hex{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+textarea{width:100%;min-height:230px;resize:vertical;background:var(--field);border:1px solid var(--line);
+  border-radius:9px;padding:10px 11px;line-height:1.5}
+.tools{display:flex;gap:8px;margin:8px 0 10px;align-items:center}
+.btn{background:var(--field);border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;font-size:13px}
+.btn:hover{border-color:var(--muted)}
+.stats{margin-left:auto;color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
+
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:1}
+.seg button{flex:1;background:var(--field);border:0;padding:7px 0;cursor:pointer;font-size:13px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+
+.switch{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer}
+.switch span{color:var(--muted);font-size:13px}
+.switch input{appearance:none;width:36px;height:20px;border-radius:20px;background:var(--line);position:relative;cursor:pointer;transition:background .15s}
+.switch input::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+.switch input:checked{background:var(--accent)}
+.switch input:checked::after{transform:translateX(16px)}
+
+.cues{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.cues li{display:flex;align-items:center;gap:2px;border:1px solid transparent;border-radius:7px}
+.cues li:hover{background:var(--field);border-color:var(--line)}
+.cue-go{flex:1;min-width:0;text-align:left;background:transparent;border:0;border-radius:7px;padding:6px 8px;cursor:pointer;display:flex;gap:10px;align-items:center}
+.cue-go span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cue-act{flex:0 0 26px;height:26px;background:transparent;border:0;border-radius:6px;cursor:pointer;color:var(--muted);font-size:13px;opacity:.5;padding:0}
+.cues li:hover .cue-act{opacity:1}
+.cue-act:hover{background:var(--line);color:var(--ink)}
+.cue-edit{flex:1;min-width:0;background:var(--field);border:1px solid var(--accent);border-radius:7px;padding:6px 8px}
+#cueName{flex:1;min-width:0}
+#addCue{flex:0 0 auto;white-space:nowrap}
+.cues kbd{flex:0 0 22px;height:22px;border-radius:5px;background:var(--field);border:1px solid var(--line);display:grid;place-items:center;font:600 12px 'IBM Plex Sans',sans-serif}
+.empty{color:var(--muted);font-size:13px;margin:0}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;color:var(--muted)}
+.keys kbd{font:500 12px 'IBM Plex Sans',sans-serif;color:var(--ink);background:var(--field);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;white-space:nowrap}
+
+/* Escenario */
+.stage{position:relative;overflow:hidden;background:#000;cursor:default;user-select:none;-webkit-user-select:none}
+.flipper{position:absolute;inset:0}
+.content{position:absolute;top:0;left:0;right:0;will-change:transform;word-wrap:break-word}
+.content.smooth{transition:transform .28s ease}
+.content .line{white-space:pre-wrap;cursor:pointer}
+.content .gap{height:.9em}
+.content .cue{font-size:.36em;font-weight:600;opacity:.55;margin:.9em 0 .5em;letter-spacing:.02em;cursor:pointer;
+  display:flex;gap:.6em;align-items:center}
+.content[data-align="center"] .cue{justify-content:center}
+.content[data-align="right"] .cue{justify-content:flex-end}
+.content .cue::before{content:"";width:.7em;height:.7em;border-radius:50%;background:var(--accent);flex:0 0 auto}
+.guide{position:absolute;left:0;right:0;height:0;pointer-events:none;z-index:2}
+.guide::before,.guide::after{content:"";position:absolute;top:-12px;border:12px solid transparent}
+.guide::before{left:0;border-left:18px solid var(--accent)}
+.guide::after{right:0;border-right:18px solid var(--accent)}
+.guide i{position:absolute;left:24px;right:24px;top:0;border-top:1px dashed color-mix(in srgb,var(--accent) 55%,transparent)}
+.count{position:absolute;inset:0;display:none;place-items:center;font:700 22vmin 'IBM Plex Sans',sans-serif;color:var(--accent);z-index:3;background:rgba(0,0,0,.35)}
+.count.on{display:grid}
+.progress{position:absolute;left:0;bottom:0;height:3px;background:var(--accent);width:0;z-index:4;opacity:.8}
+.badge{position:absolute;top:12px;right:14px;z-index:4;font-size:12px;color:#fff;background:rgba(0,0,0,.55);padding:4px 9px;border-radius:20px;pointer-events:none}
+
+/* HUD del modo prompter */
+.hud{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);z-index:60;
+  display:none;align-items:center;gap:4px;background:rgba(20,24,32,.88);color:#fff;border:1px solid rgba(255,255,255,.12);
+  border-radius:14px;padding:6px;backdrop-filter:blur(8px);opacity:0;transition:opacity .2s,transform .2s;
+  /* con left:50% y sin right, el ancho disponible seria solo 50vw: max-content lo evita */
+  width:max-content;max-width:calc(100vw - 20px);flex-wrap:wrap;justify-content:center}
+.hud.show{opacity:1;transform:translate(-50%,0)}
+.hud button{background:transparent;border:0;color:#fff;min-width:38px;height:38px;border-radius:9px;cursor:pointer;font-size:15px;padding:0 8px}
+.hud button:hover{background:rgba(255,255,255,.12)}
+.hud .pp{background:#f2b33d;color:#11151d;font-weight:700}
+.hud .pp:hover{background:#f5c15f}
+.hud .sp{font-size:13px;min-width:54px;text-align:center;font-variant-numeric:tabular-nums}
+.hud select{width:auto;max-width:150px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:8px;padding:7px}
+.hud select option{color:#000}
+.hud .sep{width:1px;height:24px;background:rgba(255,255,255,.18);margin:0 4px}
+.hud .grp{display:flex;align-items:center;gap:2px}
+.hud input[type=range]{width:88px;flex:0 0 auto;accent-color:var(--accent);height:38px;cursor:pointer}
+.hud input[type=color]{width:30px;height:30px;border:1px solid rgba(255,255,255,.25);border-radius:8px;
+  background:transparent;padding:2px;cursor:pointer;margin:0 2px}
+.hud .ico{min-width:34px;padding:0;display:grid;place-items:center}
+.hud .ico svg{display:block}
+.hud .ico[aria-pressed="true"]{background:#f2b33d;color:#11151d}
+.hud .tag{font-size:10px;letter-spacing:.06em;text-transform:uppercase;opacity:.5;padding:0 2px;user-select:none}
+/* en pantallas angostas la barra se parte en filas y se queda compacta */
+@media (max-width:680px){
+  .hud input[type=range]{width:62px}
+  .hud select{max-width:110px}
+  .hud .tag{display:none}
+}
+
+body.prompter .side{display:none}
+body.prompter .stage{position:fixed;inset:0;z-index:50;cursor:none}
+body.prompter.cursor .stage{cursor:default}
+body.prompter .hud{display:flex}
+body.prompter .badge{display:none}
+
+@media (max-width:820px){
+  body{overflow:auto}
+  .app{grid-template-columns:1fr;grid-template-rows:auto;height:auto}
+  .stage{height:55vh;order:-1;position:sticky;top:0;z-index:5}
+  .side{border-right:0}
+  /* sin esto la media query deja el escenario en 55vh dentro del modo prompter */
+  body.prompter{overflow:hidden}
+  body.prompter .stage{height:100%;order:0;position:fixed;inset:0}
+  body.prompter .app{height:100%}
+}
+@media (prefers-reduced-motion:reduce){.content.smooth{transition:none}.hud{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><h1>Teleprompter</h1><small>Se guarda solo</small></div>
+    <button class="play-main" id="startBtn">⛶ Abrir prompter</button>
+    <p class="hint">Se abre en pausa. Espacio inicia y pausa, Esc vuelve a editar. Los ajustes de pantalla están en la barra de abajo.</p>
+
+    <section>
+      <h2>Guion</h2>
+      <textarea id="text" spellcheck="true" aria-label="Texto del guion"></textarea>
+      <div class="tools">
+        <input type="text" id="cueName" placeholder="Nombre del cue" aria-label="Nombre del nuevo cue">
+        <button class="btn" id="addCue" title="Inserta el cue justo antes de la línea donde está el cursor">+ Cue</button>
+      </div>
+      <div class="tools"><span class="stats" id="stats"></span></div>
+      <p class="hint" style="margin-bottom:8px">Un cue es una línea que empieza con <b>#</b> o una etiqueta <b>&lt;cue 1 - Sala&gt;</b> en cualquier parte del guion. Si pegas un script que ya las trae, se detectan solas.</p>
+      <ul class="cues" id="cueList"></ul>
+    </section>
+
+    <section>
+      <h2>Texto</h2>
+      <div class="row"><label for="font">Fuente</label><div class="ctl"><select id="font"></select></div></div>
+      <div class="row" id="customRow" hidden><label for="customFont">Nombre</label><div class="ctl"><input type="text" id="customFont" placeholder="Ej: Futura, Avenir Next"></div></div>
+      <div class="row"><label for="size">Tamaño</label><div class="ctl"><input type="range" id="size" min="20" max="180" step="2"><output id="o-size"></output></div></div>
+      <div class="row"><label for="lh">Interlineado</label><div class="ctl"><input type="range" id="lh" min="1" max="2.4" step="0.05"><output id="o-lh"></output></div></div>
+      <label class="switch"><span>Negrita</span><input type="checkbox" id="bold"></label>
+      <div class="row"><label>Alineación</label><div class="seg" id="align">
+        <button data-align="left" aria-pressed="false">Izquierda</button>
+        <button data-align="center" aria-pressed="false">Centro</button>
+        <button data-align="right" aria-pressed="false">Derecha</button>
+      </div></div>
+    </section>
+
+    <section>
+      <h2>Movimiento</h2>
+      <div class="row"><label for="speed">Velocidad</label><div class="ctl"><input type="range" id="speed" min="0.5" max="10" step="0.5"><output id="o-speed"></output></div></div>
+      <div class="row"><label for="guide">Línea guía</label><div class="ctl"><input type="range" id="guide" min="10" max="80" step="1"><output id="o-guide"></output></div></div>
+      <label class="switch"><span>Mostrar línea guía</span><input type="checkbox" id="showGuide"></label>
+      <label class="switch"><span>Cuenta regresiva de 3 s</span><input type="checkbox" id="countdown"></label>
+    </section>
+
+    <section>
+      <h2>Pantalla</h2>
+      <div class="row"><label for="margin">Margen</label><div class="ctl"><input type="range" id="margin" min="0" max="35" step="1"><output id="o-margin"></output></div></div>
+      <div class="row"><label for="bg">Fondo</label><div class="ctl"><input type="color" id="bg"><span class="hex" id="o-bg"></span></div></div>
+      <div class="row"><label for="color">Texto</label><div class="ctl"><input type="color" id="color"><span class="hex" id="o-color"></span></div></div>
+      <label class="switch"><span>Espejo horizontal</span><input type="checkbox" id="mirrorH"></label>
+      <label class="switch"><span>Espejo vertical</span><input type="checkbox" id="mirrorV"></label>
+    </section>
+
+    <section>
+      <h2>Atajos</h2>
+      <div class="keys">
+        <kbd>Espacio</kbd><span>Play / pausa</span>
+        <kbd>↑ ↓</kbd><span>Retroceder / avanzar una línea</span>
+        <kbd>← →</kbd><span>Bajar / subir velocidad</span>
+        <kbd>1 - 9</kbd><span>Saltar al cue</span>
+        <kbd>Inicio</kbd><span>Volver al principio</span>
+        <kbd>F</kbd><span>Pantalla completa</span>
+        <kbd>Esc</kbd><span>Salir del prompter</span>
+        <kbd>Rueda</kbd><span>Mover el texto a mano</span>
+        <kbd>Clic</kbd><span>En edición: saltar a esa línea. En prompter: play / pausa</span>
+      </div>
+    </section>
+  </aside>
+
+  <main class="stage" id="stage">
+    <div class="flipper" id="flipper">
+      <div class="content" id="content"></div>
+      <div class="guide" id="guideEl"><i></i></div>
+      <div class="count" id="count"></div>
+    </div>
+    <div class="progress" id="progress"></div>
+    <div class="badge" id="badge">Vista previa</div>
+  </main>
+</div>
+
+<div class="hud" id="hud">
+  <div class="grp">
+    <button id="h-home" title="Volver al inicio (Inicio)" aria-label="Volver al inicio">⏮</button>
+    <button id="h-up" title="Retroceder una línea (↑)" aria-label="Retroceder una línea">▲</button>
+    <button class="pp" id="h-play" title="Play / pausa (Espacio)" aria-label="Play o pausa">▶</button>
+    <button id="h-down" title="Avanzar una línea (↓)" aria-label="Avanzar una línea">▼</button>
+  </div>
+  <span class="sep"></span>
+  <div class="grp">
+    <button id="h-slow" title="Más lento (←)" aria-label="Más lento">−</button>
+    <span class="sp" id="h-speed"></span>
+    <button id="h-fast" title="Más rápido (→)" aria-label="Más rápido">+</button>
+  </div>
+  <span class="sep"></span>
+  <select id="h-cue" aria-label="Saltar a cue"></select>
+  <span class="sep"></span>
+  <div class="grp">
+    <span class="tag" aria-hidden="true">A</span>
+    <input type="range" id="h-size" min="20" max="180" step="2" title="Tamaño del texto" aria-label="Tamaño del texto">
+  </div>
+  <div class="grp" id="h-align">
+    <button class="ico" data-align="left" title="Alinear a la izquierda" aria-label="Alinear a la izquierda" aria-pressed="false"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="currentColor"><rect x="1" y="2.6" width="14" height="1.7" rx=".85"/><rect x="1" y="7.15" width="9" height="1.7" rx=".85"/><rect x="1" y="11.7" width="12" height="1.7" rx=".85"/></svg></button>
+    <button class="ico" data-align="center" title="Centrar" aria-label="Centrar" aria-pressed="false"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="currentColor"><rect x="1" y="2.6" width="14" height="1.7" rx=".85"/><rect x="3.5" y="7.15" width="9" height="1.7" rx=".85"/><rect x="2" y="11.7" width="12" height="1.7" rx=".85"/></svg></button>
+    <button class="ico" data-align="right" title="Alinear a la derecha" aria-label="Alinear a la derecha" aria-pressed="false"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="currentColor"><rect x="1" y="2.6" width="14" height="1.7" rx=".85"/><rect x="6" y="7.15" width="9" height="1.7" rx=".85"/><rect x="3" y="11.7" width="12" height="1.7" rx=".85"/></svg></button>
+  </div>
+  <div class="grp">
+    <span class="tag" aria-hidden="true">↔</span>
+    <input type="range" id="h-margin" min="0" max="35" step="1" title="Margen lateral" aria-label="Margen lateral">
+  </div>
+  <div class="grp">
+    <input type="color" id="h-bg" title="Color de fondo" aria-label="Color de fondo">
+    <input type="color" id="h-color" title="Color del texto" aria-label="Color del texto">
+  </div>
+  <span class="sep"></span>
+  <div class="grp">
+    <button id="h-fs" title="Pantalla completa (F)" aria-label="Pantalla completa">⛶</button>
+    <button id="h-exit" title="Salir del prompter (Esc)" aria-label="Salir del prompter">✕</button>
+  </div>
+</div>
+
+<script>
+(function(){
+const FONTS=[
+ ["Inter","'Inter', system-ui, sans-serif"],
+ ["Roboto","'Roboto', Arial, sans-serif"],
+ ["Open Sans","'Open Sans', Arial, sans-serif"],
+ ["Lato","'Lato', Arial, sans-serif"],
+ ["Montserrat","'Montserrat', Arial, sans-serif"],
+ ["Poppins","'Poppins', Arial, sans-serif"],
+ ["Atkinson Hyperlegible","'Atkinson Hyperlegible', Arial, sans-serif"],
+ ["Merriweather","'Merriweather', Georgia, serif"],
+ ["Lora","'Lora', Georgia, serif"],
+ ["Source Serif 4","'Source Serif 4', Georgia, serif"],
+ ["Roboto Mono","'Roboto Mono', ui-monospace, monospace"],
+ ["Arial","Arial, Helvetica, sans-serif"],
+ ["Helvetica","Helvetica, Arial, sans-serif"],
+ ["Georgia","Georgia, serif"],
+ ["Verdana","Verdana, sans-serif"],
+ ["Times New Roman","'Times New Roman', Times, serif"],
+ ["Otra (escribir nombre)","custom"]
+];
+const DEFAULT_TEXT=`# Intro
+Hola, bienvenidos a este video.
+Hoy les voy a mostrar algo que va a cambiar la forma en que graban.
+
+# Punto 1
+Escribe tu guion aquí. Cada línea que empieza con # se convierte en un cue point.
+Presiona espacio para iniciar o pausar.
+
+# Punto 2
+Usa las flechas arriba y abajo para retroceder o avanzar una línea.
+Usa las teclas 1 a 9 para saltar a cada cue.
+
+# Cierre
+Gracias por ver. Nos vemos en el siguiente.`;
+
+const S={text:DEFAULT_TEXT,font:"Inter",customFont:"",size:64,lh:1.4,bold:false,align:"center",
+  speed:2,guide:35,showGuide:true,countdown:false,margin:10,bg:"#000000",color:"#ffffff",mirrorH:false,mirrorV:false};
+const KEY="teleprompter-v1";
+try{const r=localStorage.getItem(KEY);if(r)Object.assign(S,JSON.parse(r));}catch(e){}
+let saveT;function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}},250)}
+
+const $=id=>document.getElementById(id);
+const stage=$("stage"),flipper=$("flipper"),content=$("content"),guideEl=$("guideEl"),ta=$("text"),hud=$("hud");
+let y=0,maxY=0,playing=false,counting=false,cdTimer=null,last=0,cues=[],smoothT;
+
+// Fuentes
+const fontSel=$("font");
+FONTS.forEach(([n])=>{const o=document.createElement("option");o.value=n;o.textContent=n;fontSel.appendChild(o)});
+if(!FONTS.some(([n])=>n===S.font))S.font=FONTS[0][0];
+function fontStack(){
+  if(S.font==="Otra (escribir nombre)"){const c=S.customFont.trim();return c?`'${c.replace(/'/g,"")}', system-ui, sans-serif`:"system-ui, sans-serif"}
+  const f=FONTS.find(x=>x[0]===S.font);return f?f[1]:FONTS[0][1];
+}
+const lineH=()=>S.size*S.lh;
+const pxPerSec=()=>S.speed*S.size*0.3;
+const clamp=v=>Math.max(0,Math.min(maxY,v));
+
+// Render del guion
+// Un cue es una línea que empieza con # o una etiqueta <cue 1 - Sala> en cualquier parte de la línea.
+const CUE_TAG=/<\s*cue\b\s*(\d+)?\s*(?:[-–—:.)]+\s*)?([^>]*?)\s*>/gi;
+const CUE_HASH=/^\s*#\s*(.*)$/;
+
+// Parte una línea en segmentos de texto y de cue, con offsets absolutos dentro de S.text
+function parseLine(ln,off){
+  const h=ln.match(CUE_HASH);
+  if(h)return[{kind:"cue",label:h[1].trim(),num:null,fmt:"hash",from:off,to:off+ln.length}];
+  const out=[];let i=0,m;CUE_TAG.lastIndex=0;
+  while((m=CUE_TAG.exec(ln))){
+    if(m.index>i)out.push({kind:"text",text:ln.slice(i,m.index)});
+    out.push({kind:"cue",label:(m[2]||"").trim(),num:m[1]?+m[1]:null,fmt:"tag",
+      from:off+m.index,to:off+m.index+m[0].length});
+    i=m.index+m[0].length;
+  }
+  if(i<ln.length)out.push({kind:"text",text:ln.slice(i)});
+  return out.length?out:[{kind:"text",text:ln}];
+}
+
+function render(){
+  content.innerHTML="";cues=[];
+  let off=0;
+  S.text.split("\n").forEach(ln=>{
+    parseLine(ln,off).forEach(p=>{
+      const d=document.createElement("div");
+      if(p.kind==="cue"){
+        const n=cues.length+1,label=p.label||`Cue ${p.num!=null?p.num:n}`;
+        d.className="cue";d.textContent=(n<=9?n+"  ":"")+label;
+        cues.push({label,el:d,num:p.num,fmt:p.fmt,from:p.from,to:p.to});
+      }
+      else if(!p.text.trim()){d.className="gap"}
+      else{d.className="line";d.textContent=p.text}
+      content.appendChild(d);
+    });
+    off+=ln.length+1;
+  });
+  renderCues();measure();
+}
+function renderCues(){
+  const list=$("cueList"),sel=$("h-cue");list.innerHTML="";sel.innerHTML="";
+  const o0=document.createElement("option");o0.textContent=cues.length?"Saltar a cue…":"Sin cues";o0.value="";sel.appendChild(o0);
+  if(!cues.length){list.innerHTML='<li><p class="empty">Todavía no hay cues. Escribe un nombre y pulsa «+ Cue», o usa <b>#</b> o <b>&lt;cue 1 - Sala&gt;</b> en el guion.</p></li>';return}
+  cues.forEach((c,i)=>{
+    const li=document.createElement("li");
+    const go=document.createElement("button");go.className="cue-go";go.title="Saltar a este cue";
+    const kb=document.createElement("kbd");kb.textContent=i<9?i+1:"·";
+    const sp=document.createElement("span");sp.textContent=c.label;
+    go.append(kb,sp);go.onclick=()=>goCue(i);
+    const up=document.createElement("button");up.className="cue-act";up.title="Mover el cue una línea arriba";up.textContent="▲";
+    up.onclick=()=>moveCue(i,-1);
+    const dn=document.createElement("button");dn.className="cue-act";dn.title="Mover el cue una línea abajo";dn.textContent="▼";
+    dn.onclick=()=>moveCue(i,1);
+    const ed=document.createElement("button");ed.className="cue-act";ed.title="Renombrar";ed.textContent="✎";
+    ed.onclick=()=>startRename(li,i);
+    const rm=document.createElement("button");rm.className="cue-act";rm.title="Eliminar";rm.textContent="✕";
+    rm.onclick=()=>removeCue(i);
+    li.append(go,up,dn,ed,rm);list.appendChild(li);
+    const o=document.createElement("option");o.value=i;o.textContent=(i<9?(i+1)+". ":"")+c.label;sel.appendChild(o);
+  });
+}
+
+// Edicion y borrado de cues: reescriben el guion, que es la fuente de verdad
+function cueMarker(c,name){
+  name=(name||"").trim();
+  return c.fmt==="tag"?`<cue ${c.num!=null?c.num+" - ":""}${name}>`:"# "+name;
+}
+function setText(t,caret){
+  S.text=t;ta.value=t;
+  if(caret!=null){ta.selectionStart=ta.selectionEnd=caret}
+  render();save();
+}
+function startRename(li,i){
+  const c=cues[i];if(!c)return;
+  li.innerHTML="";
+  const inp=document.createElement("input");
+  inp.type="text";inp.className="cue-edit";inp.value=c.label;
+  li.appendChild(inp);inp.focus();inp.select();
+  let done=false;
+  const commit=ok=>{
+    if(done)return;done=true;
+    if(ok&&inp.value.trim()!==c.label)setText(S.text.slice(0,c.from)+cueMarker(c,inp.value)+S.text.slice(c.to));
+    else renderCues();
+  };
+  inp.addEventListener("keydown",e=>{
+    e.stopPropagation();
+    if(e.key==="Enter"){e.preventDefault();commit(true)}
+    else if(e.key==="Escape"){e.preventDefault();commit(false)}
+  });
+  inp.addEventListener("blur",()=>commit(true));
+}
+// Reasignar: mueve el marcador del cue una linea arriba o abajo dentro del guion.
+// Si el cue estaba embebido en una linea con texto, sale de ella y pasa a linea propia.
+function moveCue(i,dir){
+  const c=cues[i];if(!c)return;
+  const ls=S.text.lastIndexOf("\n",c.from-1)+1;
+  let le=S.text.indexOf("\n",c.to);if(le<0)le=S.text.length;
+  const lines=S.text.split("\n");
+  const li=S.text.slice(0,ls).split("\n").length-1;
+  const marker=S.text.slice(c.from,c.to);
+  const alone=lines[li].trim()===marker.trim();
+  if(alone){
+    const t=li+dir;
+    if(t<0||t>=lines.length)return;
+    lines[li]=lines[t];lines[t]=marker;
+  }else{
+    const a=c.from-ls,b=c.to-ls;
+    let restLine=lines[li].slice(0,a)+lines[li].slice(b);
+    if(lines[li][a-1]===" "&&lines[li][b]===" ")restLine=lines[li].slice(0,a-1)+lines[li].slice(b);
+    lines[li]=restLine;
+    lines.splice(dir<0?li:li+1,0,marker);
+  }
+  setText(lines.join("\n"));
+}
+function removeCue(i){
+  const c=cues[i];if(!c)return;
+  const ls=S.text.lastIndexOf("\n",c.from-1)+1;
+  let le=S.text.indexOf("\n",c.to);if(le<0)le=S.text.length;
+  // si al quitar el marcador la línea queda vacía, se borra la línea entera
+  const rest=(S.text.slice(ls,c.from)+S.text.slice(c.to,le)).trim();
+  let a=rest?c.from:ls,b=rest?c.to:Math.min(le+1,S.text.length);
+  // cue inline: no dejar un espacio doble donde estaba el marcador
+  if(rest&&S.text[a-1]===" "&&S.text[b]===" ")b++;
+  setText(S.text.slice(0,a)+S.text.slice(b));
+}
+function measure(){
+  maxY=Math.max(0,content.scrollHeight-lineH()*0.5);
+  y=clamp(y);applyPos();updateStats();
+}
+function updateStats(){
+  const words=(S.text.replace(/^\s*#.*$/gm,"").replace(/<\s*cue\b[^>]*>/gi,"").match(/\S+/g)||[]).length;
+  const secs=Math.round(maxY/pxPerSec());
+  $("stats").textContent=`${words} palabras · ~${Math.floor(secs/60)}:${String(secs%60).padStart(2,"0")}`;
+}
+function applyPos(){
+  const g=stage.clientHeight*S.guide/100;
+  content.style.transform=`translateY(${g-y}px)`;
+  $("progress").style.width=(maxY?y/maxY*100:0)+"%";
+}
+function jumpTo(v){
+  y=clamp(v);
+  // durante la reproduccion tick() reescribe el transform cada frame: con transicion
+  // activa el avance se vuelve elastico, asi que el salto se aplica seco
+  if(!playing){content.classList.add("smooth");clearTimeout(smoothT);
+    smoothT=setTimeout(()=>content.classList.remove("smooth"),300)}
+  applyPos();
+}
+function goCue(i){if(cues[i])jumpTo(cues[i].el.offsetTop)}
+function step(n){jumpTo(y+n*lineH())}
+
+// Estilos
+function applyStyle(){
+  stage.style.background=S.bg;
+  Object.assign(content.style,{color:S.color,fontFamily:fontStack(),fontSize:S.size+"px",lineHeight:S.lh,
+    fontWeight:S.bold?700:400,textAlign:S.align,paddingLeft:S.margin+"%",paddingRight:S.margin+"%"});
+  flipper.style.transform=`scale(${S.mirrorH?-1:1},${S.mirrorV?-1:1})`;
+  guideEl.style.top=S.guide+"%";guideEl.style.display=S.showGuide?"":"none";
+  content.dataset.align=S.align;
+  $("customRow").hidden=S.font!=="Otra (escribir nombre)";
+  document.querySelectorAll("#align button,#h-align button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.align===S.align));
+  $("o-size").textContent=S.size+" px";$("o-lh").textContent=(+S.lh).toFixed(2);
+  $("o-speed").textContent="×"+(+S.speed).toFixed(1);$("h-speed").textContent="×"+(+S.speed).toFixed(1);
+  $("o-guide").textContent=S.guide+"%";$("o-margin").textContent=S.margin+"%";
+  $("o-bg").textContent=S.bg.toUpperCase();$("o-color").textContent=S.color.toUpperCase();
+  requestAnimationFrame(measure);
+}
+
+// Controles
+ta.value=S.text;
+ta.addEventListener("input",()=>{S.text=ta.value;render();save()});
+const binds={font:"value",customFont:"value",size:"num",lh:"num",speed:"num",guide:"num",margin:"num",bg:"value",color:"value",
+  bold:"check",showGuide:"check",countdown:"check",mirrorH:"check",mirrorV:"check"};
+// Claves que ademas tienen un control gemelo en la barra del modo prompter
+const MIRRORS={size:"h-size",margin:"h-margin",bg:"h-bg",color:"h-color"};
+const ctlsOf=k=>[$(k),MIRRORS[k]?$(MIRRORS[k]):null].filter(Boolean);
+function syncControls(){
+  Object.entries(binds).forEach(([k,t])=>ctlsOf(k).forEach(el=>{
+    if(t==="check")el.checked=!!S[k];
+    else if(el.value!==String(S[k]))el.value=S[k];   // no pisar el control que el usuario esta arrastrando
+  }));
+}
+Object.entries(binds).forEach(([k,t])=>{
+  ctlsOf(k).forEach(el=>{
+    if(t==="check")el.checked=!!S[k];else el.value=S[k];
+    el.addEventListener("input",()=>{
+      S[k]=t==="check"?el.checked:t==="num"?parseFloat(el.value):el.value;
+      syncControls();applyStyle();save();
+      if(hud.contains(el))flashHud(true);
+    });
+  });
+});
+document.querySelectorAll("#align button,#h-align button").forEach(b=>b.onclick=()=>{
+  S.align=b.dataset.align;applyStyle();save();b.blur();flashHud()});
+$("addCue").onclick=()=>{
+  const el=$("cueName"),name=el.value.trim()||`Cue ${cues.length+1}`;
+  const v=ta.value,pos=ta.selectionStart||0;
+  const ls=v.lastIndexOf("\n",pos-1)+1;            // inicio de la línea donde está el cursor
+  const ins=`# ${name}\n`;
+  el.value="";
+  setText(v.slice(0,ls)+ins+v.slice(ls));
+  ta.focus();ta.selectionStart=ta.selectionEnd=ls+ins.length;
+};
+$("cueName").addEventListener("keydown",e=>{
+  if(e.key==="Enter"){e.preventDefault();$("addCue").click()}
+});
+function setSpeed(d){S.speed=Math.max(0.5,Math.min(10,+(S.speed+d).toFixed(1)));syncControls();applyStyle();save();flashHud()}
+
+// Play / pausa
+function updatePlayUI(){
+  $("h-play").textContent=playing||counting?"❚❚":"▶";
+  $("badge").textContent=playing?"Reproduciendo":"Vista previa";
+  // en pausa la barra se queda; al arrancar programa su propio ocultado
+  flashHud(!playing);
+}
+function start(){
+  if(y>=maxY-1){y=0;applyPos()}   // sin esto la cuenta regresiva corre mostrando el final
+  if(S.countdown){
+    counting=true;let n=3;const c=$("count");c.textContent=n;c.classList.add("on");updatePlayUI();
+    cdTimer=setInterval(()=>{n--;if(n>0){c.textContent=n}else{clearInterval(cdTimer);c.classList.remove("on");counting=false;playing=true;last=0;updatePlayUI()}},1000);
+  }else{playing=true;last=0;updatePlayUI()}
+}
+function stopCount(){clearInterval(cdTimer);counting=false;$("count").classList.remove("on")}
+function pause(){playing=false;stopCount();updatePlayUI()}
+function toggle(){if(playing||counting)pause();else start()}
+
+function tick(t){
+  if(playing){
+    const dt=last?Math.min(0.1,(t-last)/1000):0;last=t;
+    y+=pxPerSec()*dt;
+    if(y>=maxY){y=maxY;pause()}
+    applyPos();
+  }else last=0;
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// Modo prompter
+function enterPrompter(){
+  if(document.activeElement)document.activeElement.blur();
+  document.body.classList.add("prompter");
+  // entra en pausa: da tiempo a ajustar tamaño, margen y colores antes de rodar
+  requestAnimationFrame(()=>{measure();updatePlayUI();flashHud(true)});
+}
+function exitPrompter(){
+  pause();document.body.classList.remove("prompter","cursor");
+  if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen().catch(()=>{});
+  requestAnimationFrame(measure);
+}
+function toggleFS(){
+  try{
+    if(document.fullscreenElement)document.exitFullscreen();
+    else{if(!document.body.classList.contains("prompter"))enterPrompter();document.documentElement.requestFullscreen().catch(()=>{})}
+  }catch(e){}
+}
+$("startBtn").onclick=enterPrompter;
+
+// HUD
+let hudT;
+function hudBusy(){
+  return hud.matches(":hover")||hud.contains(document.activeElement);
+}
+function flashHud(stay){
+  if(!document.body.classList.contains("prompter"))return;
+  hud.classList.add("show");document.body.classList.add("cursor");clearTimeout(hudT);
+  if(playing&&!stay)hudT=setTimeout(()=>{
+    if(playing&&!hudBusy()){hud.classList.remove("show");document.body.classList.remove("cursor")}
+    else flashHud();   // sigue en uso: reintenta mas tarde
+  },2500);
+}
+document.addEventListener("mousemove",()=>flashHud());
+hud.addEventListener("mouseenter",()=>flashHud(true));
+hud.addEventListener("mouseleave",()=>flashHud());
+$("h-home").onclick=()=>jumpTo(0);
+$("h-up").onclick=()=>step(-1);
+$("h-down").onclick=()=>step(1);
+$("h-play").onclick=toggle;
+$("h-slow").onclick=()=>setSpeed(-0.5);
+$("h-fast").onclick=()=>setSpeed(0.5);
+$("h-fs").onclick=toggleFS;
+$("h-exit").onclick=exitPrompter;
+$("h-cue").onchange=e=>{if(e.target.value!=="")goCue(+e.target.value);e.target.value="";e.target.blur()};
+hud.addEventListener("click",e=>{if(e.target.tagName==="BUTTON")e.target.blur()});
+
+// Escenario: clic y rueda
+stage.addEventListener("click",e=>{
+  if(document.body.classList.contains("prompter")){toggle();return}
+  const el=e.target.closest(".line,.cue,.gap");if(el)jumpTo(el.offsetTop);
+});
+stage.addEventListener("wheel",e=>{
+  // en el layout de una columna el escenario es sticky: tragarse la rueda impedia
+  // hacer scroll de la pagina para llegar a los controles
+  const prompter=document.body.classList.contains("prompter");
+  if(!prompter&&window.matchMedia("(max-width:820px)").matches)return;
+  e.preventDefault();y=clamp(y+e.deltaY*(S.mirrorV?-1:1));applyPos();
+},{passive:false});
+
+// Teclado
+document.addEventListener("keydown",e=>{
+  const t=e.target;
+  if(t.tagName==="TEXTAREA"||t.tagName==="SELECT"||(t.tagName==="INPUT"&&t.type==="text"))return;
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  const k=e.key;let handled=true;
+  if(k===" "||k==="Spacebar")toggle();
+  else if(k==="ArrowUp")step(-1);
+  else if(k==="ArrowDown")step(1);
+  else if(k==="ArrowLeft")setSpeed(-0.5);
+  else if(k==="ArrowRight")setSpeed(0.5);
+  else if(k==="PageUp")jumpTo(y-stage.clientHeight*0.6);
+  else if(k==="PageDown")jumpTo(y+stage.clientHeight*0.6);
+  else if(k==="Home")jumpTo(0);
+  else if(k==="End")jumpTo(maxY);
+  else if(/^[1-9]$/.test(k))goCue(+k-1);
+  else if(k==="f"||k==="F")toggleFS();
+  else if(k==="Escape"&&document.body.classList.contains("prompter"))exitPrompter();
+  else handled=false;
+  if(handled){e.preventDefault();if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur()}
+});
+
+window.addEventListener("resize",()=>measure());
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(measure);
+render();applyStyle();
+})();
+</script>
+</body>
+</html>
