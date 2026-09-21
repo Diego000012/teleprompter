@@ -82,6 +82,7 @@ textarea{width:100%;min-height:230px;resize:vertical;background:var(--field);bor
 .btn{background:var(--field);border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;font-size:13px}
 .btn:hover{border-color:var(--muted)}
 .stats{margin-left:auto;color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
+.warn{color:var(--accent);font-weight:500;margin:0 0 10px}
 
 .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:1}
 .seg button{flex:1;background:var(--field);border:0;padding:7px 0;cursor:pointer;font-size:13px}
@@ -114,7 +115,10 @@ textarea{width:100%;min-height:230px;resize:vertical;background:var(--field);bor
 /* Escenario */
 .stage{position:relative;overflow:hidden;background:#000;cursor:default;user-select:none;-webkit-user-select:none}
 .flipper{position:absolute;inset:0}
-.content{position:absolute;top:0;left:0;right:0;will-change:transform;word-wrap:break-word}
+/* El salto de linea ocurre solo entre palabras. Con break-word, al subir el
+   margen se reduce el ancho util y las palabras se partian por la mitad. */
+.content{position:absolute;top:0;left:0;right:0;will-change:transform;
+  overflow-wrap:normal;word-break:normal;hyphens:none}
 .content.smooth{transition:transform .28s ease}
 .content .line{white-space:pre-wrap;cursor:pointer}
 .content .gap{height:.9em}
@@ -197,6 +201,7 @@ body.prompter .badge{display:none}
         <button class="btn" id="addCue" title="Inserta el cue justo antes de la línea donde está el cursor">+ Cue</button>
       </div>
       <div class="tools"><span class="stats" id="stats"></span></div>
+      <p class="hint warn" id="fitWarn" hidden>⚠ Hay una palabra más ancha que el espacio disponible: se va a cortar por el borde. Baja el tamaño o el margen.</p>
       <p class="hint" style="margin-bottom:8px">Un cue es una línea que empieza con <b>#</b> o una etiqueta <b>&lt;cue 1 - Sala&gt;</b> en cualquier parte del guion. Si pegas un script que ya las trae, se detectan solas.</p>
       <ul class="cues" id="cueList"></ul>
     </section>
@@ -490,6 +495,9 @@ function updateStats(){
   const words=(S.text.replace(/^\s*#.*$/gm,"").replace(/<\s*cue\b[^>]*>/gi,"").match(/\S+/g)||[]).length;
   const secs=Math.round(maxY/pxPerSec());
   $("stats").textContent=`${words} palabras · ~${Math.floor(secs/60)}:${String(secs%60).padStart(2,"0")}`;
+  // sin break-word una palabra que no quepa desborda, y el overflow del
+  // escenario la cortaria sin que se note: mejor avisarlo
+  $("fitWarn").hidden=content.scrollWidth<=content.clientWidth+1;
 }
 function applyPos(){
   const g=stage.clientHeight*S.guide/100;
